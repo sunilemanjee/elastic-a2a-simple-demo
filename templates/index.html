@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elastic A2A Chat</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #07C;
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header h1 { font-size: 18px; font-weight: 600; }
+    header .subtitle { font-size: 13px; opacity: 0.8; }
+
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message {
+      max-width: 720px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      line-height: 1.5;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: #07C;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.agent {
+      align-self: flex-start;
+      background: #fff;
+      color: #1a1a1a;
+      border: 1px solid #e0e0e0;
+      border-bottom-left-radius: 4px;
+    }
+
+    .message.error {
+      align-self: center;
+      background: #fee;
+      color: #c00;
+      border: 1px solid #fcc;
+      font-size: 13px;
+    }
+
+    .typing {
+      align-self: flex-start;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .typing span {
+      animation: blink 1.4s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: 0.2s; }
+    .typing span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes blink {
+      0%, 80%, 100% { opacity: 0.2; }
+      40% { opacity: 1; }
+    }
+
+    #input-area {
+      padding: 16px 24px;
+      background: #fff;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      gap: 12px;
+    }
+
+    #input-area textarea {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      min-height: 44px;
+      max-height: 120px;
+    }
+
+    #input-area textarea:focus { border-color: #07C; }
+
+    #input-area button {
+      padding: 0 20px;
+      background: #07C;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #input-area button:hover { background: #005fa3; }
+    #input-area button:disabled { background: #aaa; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1 id="agent-name">Elastic A2A Chat</h1>
+    <div class="subtitle" id="agent-desc">Connecting...</div>
+  </div>
+</header>
+
+<div id="chat"></div>
+
+<div id="input-area">
+  <textarea id="msg" placeholder="Ask a question..." rows="1"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea>
+  <button id="btn" onclick="send()">Send</button>
+</div>
+
+<script>
+  const chat = document.getElementById("chat");
+  const msg = document.getElementById("msg");
+  const btn = document.getElementById("btn");
+
+  // Load agent info
+  fetch("/api/agent")
+    .then(r => r.json())
+    .then(data => {
+      if (data.name) document.getElementById("agent-name").textContent = data.name;
+      if (data.description) document.getElementById("agent-desc").textContent = data.description;
+    })
+    .catch(() => {
+      document.getElementById("agent-desc").textContent = "Could not load agent info";
+    });
+
+  function addMessage(text, cls) {
+    const div = document.createElement("div");
+    div.className = "message " + cls;
+    div.textContent = text;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    return div;
+  }
+
+  function showTyping() {
+    const div = document.createElement("div");
+    div.className = "typing";
+    div.id = "typing";
+    div.innerHTML = "Agent is thinking<span>.</span><span>.</span><span>.</span>";
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function hideTyping() {
+    const el = document.getElementById("typing");
+    if (el) el.remove();
+  }
+
+  async function send() {
+    const text = msg.value.trim();
+    if (!text) return;
+
+    addMessage(text, "user");
+    msg.value = "";
+    msg.style.height = "auto";
+    btn.disabled = true;
+    showTyping();
+
+    try {
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await resp.json();
+      hideTyping();
+
+      if (data.error) {
+        addMessage("Error: " + data.error, "error");
+      } else {
+        addMessage(data.reply, "agent");
+      }
+    } catch (e) {
+      hideTyping();
+      addMessage("Network error: " + e.message, "error");
+    }
+
+    btn.disabled = false;
+    msg.focus();
+  }
+
+  // Auto-resize textarea
+  msg.addEventListener("input", function () {
+    this.style.height = "auto";
+    this.style.height = Math.min(this.scrollHeight, 120) + "px";
+  });
+</script>
+
+</body>
+</html>
