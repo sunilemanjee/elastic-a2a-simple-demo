@@ -2,3 +2,4 @@ variables.env
 __pycache__/
 *.pyc
 .venv/
+start.log
