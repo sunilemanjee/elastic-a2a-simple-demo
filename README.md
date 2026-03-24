@@ -73,6 +73,16 @@ A collection of tools for interacting with Elastic Agent Builder agents via the 
    UI_PORT=8089
    ```
 
+## Quick Start
+
+After completing the setup above, run both apps with a single command:
+
+```bash
+./start.sh
+```
+
+This installs dependencies, runs the connectivity test, and starts the chat UI in the background. All output is logged to `start.log`.
+
 ## Apps
 
 | App | Description |
